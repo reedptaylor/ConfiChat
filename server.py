@@ -9,26 +9,29 @@ import thread
 import pickle
 
 activeUsers = []
+activeSockets = []
 
 #check user name and password for logging in
-def checkuser(username, password):
-    global activeUsers
+def checkuser(username, password, clientConnectionSocket):
+    global activeUsers, activeSockets
     f = open("users.txt", "r")
     for x in f:
         user = x.split("#") #separate username from password
         if (user[0] == username and user[1].strip("\n") == password and user[0] not in activeUsers):
             activeUsers.append(username)
+            activeSockets.append(clientConnectionSocket)
             return(True)
     return(False)
 
 # this function is run within a new thread whenever a new client connects.
 def clientHandler(clientConnectionSocket, addr):
-    global activeUsers
+    global activeUsers, activeSockets
     clientConnectionSocket.send("00") #alert client to enter username and password
-    username = clientConnectionSocket.recv(1024)
-    password = clientConnectionSocket.recv(1024)
+    login = clientConnectionSocket.recv(1024).split("#")
+    username  = login[0]
+    password = login[1]
 
-    if (checkuser(username, password) == False):
+    if (checkuser(username, password, clientConnectionSocket) == False):
         clientConnectionSocket.send("02") #alert failed log in
         clientConnectionSocket.close()
         return
@@ -42,6 +45,7 @@ def clientHandler(clientConnectionSocket, addr):
             friend = clientMessage[2:]
             match = friend in activeUsers #find active user not complete
             if (match):
+                buddySocket = activeSockets[activeUsers.index(friend)]
                 clientConnectionSocket.send("04")
             else:
                 clientConnectionSocket.send("01" + pickle.dumps(activeUsers))
@@ -50,13 +54,14 @@ def clientHandler(clientConnectionSocket, addr):
             break
 
         if clientMessage[0:2] == "10":
-            clientConnectionSocket.send(clientMessage)
+            buddySocket.send(clientMessage)
 
-    clientConnectionSocket.close()
     activeUsers.remove(username)
+    activeSockets.remove(clientConnectionSocket)
+    clientConnectionSocket.close()
     return
 
-serverPort = 12000
+serverPort = 12004
 
 serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.bind(('', serverPort))

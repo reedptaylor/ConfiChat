@@ -5,6 +5,7 @@ from Crypto.Util import Counter
 from sys import exit
 import signal, os
 import pickle
+import thread
 
 def signal_handler(signum, frame):
     print "Closing connection"
@@ -12,16 +13,24 @@ def signal_handler(signum, frame):
     clientSocket.close()
     exit()
 
+def receiveHandler(clientSocket, decryptAES):
+    serverMessage = clientSocket.recv(1024)
+    if serverMessage[0:2] == "10":
+        plaintext = decryptAES.decrypt(serverMessage[2:])
+        print 'From Server: ', plaintext
+
 serverName = 'localhost'
-serverPort = 12000
+serverPort = 12004
 
 clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((serverName, serverPort))
 
 signal.signal(signal.SIGINT, signal_handler)
 
-key = Random.new().read(16)
-iv = Random.new().read(16)
+# key = Random.new().read(16)
+key = 'aaaaaaaaaaaaaaaa'
+# iv = Random.new().read(16)
+iv = 'aaaaaaaaaaaaaaaa'
 encryptCtr = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
 encryptAES = AES.new(key, AES.MODE_CTR, counter=encryptCtr)
 decryptCTR = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
@@ -33,8 +42,8 @@ while (1): #setup
     if setupMessage[0:2] == "00":
         username = raw_input('Enter Username: ')
         password = raw_input('Enter Password: ')
-        clientSocket.send(username)
-        clientSocket.send(password)
+        clientSocket.send(username + "#" + password)
+        print "got here"
 
     elif setupMessage[0:2] == "01":
         print("Welcome " + username + "!")
@@ -57,13 +66,12 @@ while (1): #setup
         exit()
 
 while True:
+
+    thread.start_new_thread(receiveHandler, (clientSocket, decryptAES))
+
     sentence = raw_input('Enter message: ')
 
     ciphertext = encryptAES.encrypt(sentence)
     clientSocket.send("10" + ciphertext)
-
-    serverMessage = clientSocket.recv(1024)
-    plaintext = decryptAES.decrypt(serverMessage[2:])
-    print 'From Server: ', plaintext
 
 clientSocket.close()
