@@ -1,11 +1,13 @@
 from socket import *
 from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Util import Counter
 from sys import exit
-import signal, os
+import signal, os, sys
 import pickle
 import thread
+import ast
 
 def signal_handler(signum, frame):
     print "Closing connection"
@@ -13,28 +15,48 @@ def signal_handler(signum, frame):
     clientSocket.close()
     exit()
 
-def receiveHandler(clientSocket, decryptAES):
+def receiveHandler(clientSocket, clientDecryptAES):
     serverMessage = clientSocket.recv(1024)
     if serverMessage[0:2] == "10":
-        plaintext = decryptAES.decrypt(serverMessage[2:])
-        print 'From Server: ', plaintext
+        plaintext = clientDecryptAES.decrypt(serverMessage[2:])
+        print '\nFrom ' + buddyName + ':', plaintext
+        sys.stdout.write('Enter message: ')
+        sys.stdout.flush()
 
 serverName = 'localhost'
-serverPort = 12004
+serverPort = 12002
 
 clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((serverName, serverPort))
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# key = Random.new().read(16)
-key = 'aaaaaaaaaaaaaaaa'
-# iv = Random.new().read(16)
-iv = 'aaaaaaaaaaaaaaaa'
-encryptCtr = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
-encryptAES = AES.new(key, AES.MODE_CTR, counter=encryptCtr)
-decryptCTR = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
-decryptAES = AES.new(key, AES.MODE_CTR, counter=decryptCTR)
+keygenRandom = Random.new().read
+rsaKey = RSA.generate(1024, keygenRandom)
+publicKey = rsaKey.publickey()
+# encrypted = publicKey.encrypt('encrypt this message', 32)
+# print 'encrypted message:', encrypted
+# decrypted = rsaKey.decrypt(ast.literal_eval(str(encrypted)))
+# print 'decrypted', decrypted
+
+
+# clientKey = Random.new().read(16)
+clientKey = 'aaaaaaaaaaaaaaaa'
+# clientIv = Random.new().read(16)
+clientIv = 'aaaaaaaaaaaaaaaa'
+clientEncryptCtr = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
+clientEncryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientEncryptCtr)
+clientDecryptCTR = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
+clientDecryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientDecryptCTR)
+
+# serverKey = Random.new().read(16)
+serverKey = 'bbbbbbbbbbbbbbbb'
+# serverIv = Random.new().read(16)
+serverIv = 'bbbbbbbbbbbbbbbb'
+serverEncryptCtr = Counter.new(128, initial_value=long(serverIv.encode("hex"), 16))
+serverEncryptAES = AES.new(serverKey, AES.MODE_CTR, counter=serverEncryptCtr)
+serverDecryptCTR = Counter.new(128, initial_value=long(serverIv.encode("hex"), 16))
+serverDecryptAES = AES.new(serverKey, AES.MODE_CTR, counter=serverDecryptCTR)
 
 while (1): #setup
     setupMessage = clientSocket.recv(1024)
@@ -42,15 +64,15 @@ while (1): #setup
     if setupMessage[0:2] == "00":
         username = raw_input('Enter Username: ')
         password = raw_input('Enter Password: ')
-        clientSocket.send(username + "#" + password)
-        print "got here"
+        clientSocket.send(serverEncryptAES.encrypt(username + "#" + password))
 
     elif setupMessage[0:2] == "01":
         print("Welcome " + username + "!")
         print("Users connected:")
-        for x in pickle.loads(setupMessage[2:]):
+        for x in pickle.loads(serverDecryptAES.decrypt(setupMessage[2:])):
             print(x)
-        clientSocket.send("03" + raw_input('Select user to talk to: '))
+        buddyName = raw_input('Select user to talk to: ')
+        clientSocket.send("03" + serverEncryptAES.encrypt(buddyName))
 
     elif setupMessage[0:2] == "02":
         print("Incorrect Username/Password or already logged in")
@@ -67,11 +89,11 @@ while (1): #setup
 
 while True:
 
-    thread.start_new_thread(receiveHandler, (clientSocket, decryptAES))
+    thread.start_new_thread(receiveHandler, (clientSocket, clientDecryptAES))
 
     sentence = raw_input('Enter message: ')
 
-    ciphertext = encryptAES.encrypt(sentence)
+    ciphertext = clientEncryptAES.encrypt(sentence)
     clientSocket.send("10" + ciphertext)
 
 clientSocket.close()

@@ -5,8 +5,12 @@
 from socket import *
 from Crypto.Cipher import AES
 from Crypto import Random
+from Crypto.Util import Counter
+from Crypto.PublicKey import RSA
 import thread
 import pickle
+import signal, os
+import ast
 
 activeUsers = []
 activeSockets = []
@@ -26,8 +30,18 @@ def checkuser(username, password, clientConnectionSocket):
 # this function is run within a new thread whenever a new client connects.
 def clientHandler(clientConnectionSocket, addr):
     global activeUsers, activeSockets
+
+    # key = Random.new().read(16)
+    key = 'bbbbbbbbbbbbbbbb'
+    # iv = Random.new().read(16)
+    iv = 'bbbbbbbbbbbbbbbb'
+    encryptCtr = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
+    encryptAES = AES.new(key, AES.MODE_CTR, counter=encryptCtr)
+    decryptCTR = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
+    decryptAES = AES.new(key, AES.MODE_CTR, counter=decryptCTR)
+
     clientConnectionSocket.send("00") #alert client to enter username and password
-    login = clientConnectionSocket.recv(1024).split("#")
+    login = decryptAES.decrypt(clientConnectionSocket.recv(1024)).split("#")
     username  = login[0]
     password = login[1]
 
@@ -36,19 +50,19 @@ def clientHandler(clientConnectionSocket, addr):
         clientConnectionSocket.close()
         return
     else:
-        clientConnectionSocket.send("01" + pickle.dumps(activeUsers))
+        clientConnectionSocket.send("01" + encryptAES.encrypt(pickle.dumps(activeUsers)))
 
     while True:
         clientMessage = clientConnectionSocket.recv(1024)
 
         if clientMessage[0:2] == "03": #select user
-            friend = clientMessage[2:]
+            friend = decryptAES.decrypt(clientMessage[2:])
             match = friend in activeUsers #find active user not complete
             if (match):
                 buddySocket = activeSockets[activeUsers.index(friend)]
                 clientConnectionSocket.send("04")
             else:
-                clientConnectionSocket.send("01" + pickle.dumps(activeUsers))
+                clientConnectionSocket.send("01" + encryptAES.encrypt(pickle.dumps(activeUsers)))
 
         if clientMessage[0:2] == "11": #code to close
             break
@@ -61,11 +75,16 @@ def clientHandler(clientConnectionSocket, addr):
     clientConnectionSocket.close()
     return
 
-serverPort = 12004
+serverPort = 12002
 
 serverSocket = socket(AF_INET, SOCK_STREAM)
+serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 serverSocket.bind(('', serverPort))
 serverSocket.listen(5)
+
+keygenRandom = Random.new().read
+rsaKey = RSA.generate(1024, keygenRandom)
+publicKey = rsaKey.publickey()
 
 print('The server is ready to receive')
 
