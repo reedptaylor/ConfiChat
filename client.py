@@ -16,20 +16,29 @@ def signal_handler(signum, frame):
     exit()
 
 def receiveHandler(clientSocket, clientDecryptAES):
-    serverMessage = clientSocket.recv(1024)
-    if serverMessage[0:2] == "10":
-        plaintext = clientDecryptAES.decrypt(serverMessage[2:])
-        print '\nFrom ' + buddyName + ':', plaintext
-        sys.stdout.write('Enter message: ')
-        sys.stdout.flush()
+    global messagesEnabled
+    while True:
+        serverMessage = clientSocket.recv(1024)
+        if serverMessage[0:2] == "10":
+            plaintext = clientDecryptAES.decrypt(serverMessage[2:])
+            print '\rFrom ' + buddyName + ':', plaintext
+            sys.stdout.write('Enter message: ')
+            sys.stdout.flush()
+        elif serverMessage[0:2] == "12":
+            messagesEnabled = True
+            print(chr(27) + "[2J")
+            print "Chat with " + buddyName
 
 serverName = 'localhost'
-serverPort = 12002
+serverPort = 12000
 
 clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((serverName, serverPort))
 
 signal.signal(signal.SIGINT, signal_handler)
+new = True
+requestedConnect = False
+messagesEnabled = False
 
 keygenRandom = Random.new().read
 rsaKey = RSA.generate(1024, keygenRandom)
@@ -67,12 +76,28 @@ while (1): #setup
         clientSocket.send(serverEncryptAES.encrypt(username + "#" + password))
 
     elif setupMessage[0:2] == "01":
-        print("Welcome " + username + "!")
+        print(chr(27) + "[2J")
+        if (new):
+            print("Welcome " + username + "!")
+            new = False
+        elif (buddyName != ""):
+            print "User " + buddyName + " is not avaiable or does not exist."
         print("Users connected:")
+        connected = 0
         for x in pickle.loads(serverDecryptAES.decrypt(setupMessage[2:])):
-            print(x)
-        buddyName = raw_input('Select user to talk to: ')
-        clientSocket.send("03" + serverEncryptAES.encrypt(buddyName))
+            if (len(x.split("#")) > 1 and x.split("#")[1] == username):
+                clientSocket.send("06" + serverEncryptAES.encrypt(x))
+                buddyName = x.split("#")[0]
+                requestedConnect = True
+                break
+            elif (x != username):
+                connected = connected + 1
+                print(x)
+        if not requestedConnect:
+            if connected == 0:
+                print("Nobody else connected currently")
+            buddyName = raw_input('Select user to talk to (or press enter to refresh): ')
+            clientSocket.send("03" + serverEncryptAES.encrypt(buddyName))
 
     elif setupMessage[0:2] == "02":
         print("Incorrect Username/Password or already logged in")
@@ -80,20 +105,31 @@ while (1): #setup
         exit()
 
     elif setupMessage[0:2] == "04":
-        break #TEMP
+        print(chr(27) + "[2J")
+        print "Waiting for " + buddyName + "...\n"
+        break
+
+    elif setupMessage[0:2] == "07":
+        print(chr(27) + "[2J")
+        print "Chat requested from " + buddyName + "\n"
+        messagesEnabled = True
+        clientSocket.send("12")
+        break
 
     else:
         print "Error: Failed setup"
         clientSocket.close()
         exit()
 
+thread.start_new_thread(receiveHandler, (clientSocket, clientDecryptAES))
 while True:
+    if messagesEnabled:
+        sentence = raw_input("Enter message: ")
 
-    thread.start_new_thread(receiveHandler, (clientSocket, clientDecryptAES))
-
-    sentence = raw_input('Enter message: ')
-
-    ciphertext = clientEncryptAES.encrypt(sentence)
-    clientSocket.send("10" + ciphertext)
+        ciphertext = clientEncryptAES.encrypt(sentence)
+        try:
+            clientSocket.send("10" + ciphertext)
+        except SocketError as e:
+            break
 
 clientSocket.close()

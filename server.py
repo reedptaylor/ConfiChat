@@ -1,5 +1,5 @@
 ###
-#Alerts: 00=enter user/pass, 01 successful login, 02, failed log in, 11 close connection, 03 select user, 04 successful select, 05 failed select
+#Alerts: 00=enter user/pass, 01 successful login, 02, failed log in, 11 close connection, 03 select user, 04 successful select, 05 failed select, 06 accepting request, 07 successful link, 12 other user connected
 #Message Format: "10message" where message is the text to send
 ###
 from socket import *
@@ -31,6 +31,8 @@ def checkuser(username, password, clientConnectionSocket):
 def clientHandler(clientConnectionSocket, addr):
     global activeUsers, activeSockets
 
+    requestedConnect = False
+
     # key = Random.new().read(16)
     key = 'bbbbbbbbbbbbbbbb'
     # iv = Random.new().read(16)
@@ -56,26 +58,48 @@ def clientHandler(clientConnectionSocket, addr):
         clientMessage = clientConnectionSocket.recv(1024)
 
         if clientMessage[0:2] == "03": #select user
+            for x in activeUsers:
+                if (len(x.split("#")) > 1 and x.split("#")[1] == username):
+                    requestedConnect = True
+                    break
             friend = decryptAES.decrypt(clientMessage[2:])
             match = friend in activeUsers #find active user not complete
-            if (match):
+            if (match and not requestedConnect):
                 buddySocket = activeSockets[activeUsers.index(friend)]
                 clientConnectionSocket.send("04")
+                activeUsers.remove(friend)
+                activeSockets.remove(buddySocket)
+                activeUsers[activeUsers.index(username)] = username + "#" + friend #link users together
             else:
                 clientConnectionSocket.send("01" + encryptAES.encrypt(pickle.dumps(activeUsers)))
+
+        if clientMessage[0:2] == "06": #tie connection together
+            message = decryptAES.decrypt(clientMessage[2:])
+            friend = message.split("#")[0]
+            buddySocket = activeSockets[activeUsers.index(message)]
+            clientConnectionSocket.send("07")
+            activeUsers.remove(message)
+            activeSockets.remove(buddySocket)
 
         if clientMessage[0:2] == "11": #code to close
             break
 
-        if clientMessage[0:2] == "10":
-            buddySocket.send(clientMessage)
+        if clientMessage[0:2] == "10" or clientMessage[0:2] == "12":
+            try:
+                buddySocket.send(clientMessage)
+            except SocketError as e:
+                break
 
-    activeUsers.remove(username)
-    activeSockets.remove(clientConnectionSocket)
+    try:
+        activeUsers.remove(username)
+        activeSockets.remove(clientConnectionSocket)
+    except:
+        pass
+    print("client disconnected", username, clientConnectionSocket)
     clientConnectionSocket.close()
     return
 
-serverPort = 12002
+serverPort = 12000
 
 serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -86,7 +110,7 @@ keygenRandom = Random.new().read
 rsaKey = RSA.generate(1024, keygenRandom)
 publicKey = rsaKey.publickey()
 
-print('The server is ready to receive')
+print('The server is initialized')
 
 while True:
     connectionSocket, addr = serverSocket.accept()
