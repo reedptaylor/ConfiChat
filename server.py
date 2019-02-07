@@ -1,5 +1,5 @@
 ###
-#Alerts: 00=enter user/pass, 01 successful login, 02, failed log in, 11 close connection, 03 select user, 04 successful select, 05 failed select, 06 accepting request, 07 successful link, 12 other user connected
+#Alerts: 00=enter user/pass, 01 successful login, 02, failed log in, 11 close connection, 03 select user, 04 successful select, 05 failed select, 06 accepting request, 07 successful link, 12 other user connected, 13 end connection
 #Message Format: "10message" where message is the text to send
 ###
 from socket import *
@@ -32,6 +32,7 @@ def clientHandler(clientConnectionSocket, addr):
     global activeUsers, activeSockets
 
     requestedConnect = False
+    buddySocket = ""
 
     # key = Random.new().read(16)
     key = 'bbbbbbbbbbbbbbbb'
@@ -73,7 +74,7 @@ def clientHandler(clientConnectionSocket, addr):
             else:
                 clientConnectionSocket.send("01" + encryptAES.encrypt(pickle.dumps(activeUsers)))
 
-        if clientMessage[0:2] == "06": #tie connection together
+        elif clientMessage[0:2] == "06": #tie connection together
             message = decryptAES.decrypt(clientMessage[2:])
             friend = message.split("#")[0]
             buddySocket = activeSockets[activeUsers.index(message)]
@@ -81,13 +82,18 @@ def clientHandler(clientConnectionSocket, addr):
             activeUsers.remove(message)
             activeSockets.remove(buddySocket)
 
-        if clientMessage[0:2] == "11": #code to close
+        elif clientMessage[0:2] == "11": #code to close
+            if buddySocket != "":
+                try:
+                    buddySocket.send("13")
+                except:
+                    break
             break
 
-        if clientMessage[0:2] == "10" or clientMessage[0:2] == "12":
+        elif clientMessage[0:1] == "1":
             try:
                 buddySocket.send(clientMessage)
-            except SocketError as e:
+            except:
                 break
 
     try:

@@ -28,6 +28,11 @@ def receiveHandler(clientSocket, clientDecryptAES):
             messagesEnabled = True
             print(chr(27) + "[2J")
             print "Chat with " + buddyName
+        elif serverMessage[0:2] == "13":
+            print "Connection closed. Other user disconnected."
+            clientSocket.send("11")
+            clientSocket.close()
+            exit()
 
 serverName = 'localhost'
 serverPort = 12000
@@ -124,12 +129,15 @@ while (1): #setup
 thread.start_new_thread(receiveHandler, (clientSocket, clientDecryptAES))
 while True:
     if messagesEnabled:
-        sentence = raw_input("Enter message: ")
+        try:
+            sentence = raw_input("Enter message: ")
+        except:
+            exit()
 
         ciphertext = clientEncryptAES.encrypt(sentence)
         try:
             clientSocket.send("10" + ciphertext)
-        except SocketError as e:
+        except:
             break
 
 clientSocket.close()
