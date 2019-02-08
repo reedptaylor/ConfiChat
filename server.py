@@ -34,10 +34,12 @@ def clientHandler(clientConnectionSocket, addr):
     requestedConnect = False
     buddySocket = ""
 
-    # key = Random.new().read(16)
-    key = 'bbbbbbbbbbbbbbbb'
-    # iv = Random.new().read(16)
-    iv = 'bbbbbbbbbbbbbbbb'
+    clientConnectionSocket.send("08" + publicKey.exportKey('PEM')) # first send server public key
+    keyAndIV = clientConnectionSocket.recv(1024).split("##") # then receive the encrypted key and iv
+    key = rsaKey.decrypt(ast.literal_eval(str(keyAndIV[0]))) # get the key
+    iv = rsaKey.decrypt(ast.literal_eval(str(keyAndIV[1]))) # get the IV
+
+    # now generate the AES objects for symmetric crypto
     encryptCtr = Counter.new(128, initial_value=long(iv.encode("hex"), 16))
     encryptAES = AES.new(key, AES.MODE_CTR, counter=encryptCtr)
     decryptCTR = Counter.new(128, initial_value=long(iv.encode("hex"), 16))

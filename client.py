@@ -63,10 +63,8 @@ clientEncryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientEncryptCtr)
 clientDecryptCTR = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
 clientDecryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientDecryptCTR)
 
-# serverKey = Random.new().read(16)
-serverKey = 'bbbbbbbbbbbbbbbb'
-# serverIv = Random.new().read(16)
-serverIv = 'bbbbbbbbbbbbbbbb'
+serverKey = Random.new().read(16)
+serverIv = Random.new().read(16)
 serverEncryptCtr = Counter.new(128, initial_value=long(serverIv.encode("hex"), 16))
 serverEncryptAES = AES.new(serverKey, AES.MODE_CTR, counter=serverEncryptCtr)
 serverDecryptCTR = Counter.new(128, initial_value=long(serverIv.encode("hex"), 16))
@@ -120,6 +118,13 @@ while (1): #setup
         messagesEnabled = True
         clientSocket.send("12")
         break
+
+    elif setupMessage[0:2] == "08":
+        # receive the public key from the server and send the key and IV encrypted with this so only the server can decrypt
+        serverPublicKey = setupMessage[2:]
+        serverPublicKey = RSA.importKey(serverPublicKey)
+        keyAndIV = str(serverPublicKey.encrypt(serverKey, 32)) + "##" + str(serverPublicKey.encrypt(serverIv, 32))
+        clientSocket.send(keyAndIV)
 
     else:
         print "Error: Failed setup"
