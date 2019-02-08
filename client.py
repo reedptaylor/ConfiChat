@@ -48,20 +48,6 @@ messagesEnabled = False
 keygenRandom = Random.new().read
 rsaKey = RSA.generate(1024, keygenRandom)
 publicKey = rsaKey.publickey()
-# encrypted = publicKey.encrypt('encrypt this message', 32)
-# print 'encrypted message:', encrypted
-# decrypted = rsaKey.decrypt(ast.literal_eval(str(encrypted)))
-# print 'decrypted', decrypted
-
-
-# clientKey = Random.new().read(16)
-clientKey = 'aaaaaaaaaaaaaaaa'
-# clientIv = Random.new().read(16)
-clientIv = 'aaaaaaaaaaaaaaaa'
-clientEncryptCtr = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
-clientEncryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientEncryptCtr)
-clientDecryptCTR = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
-clientDecryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientDecryptCTR)
 
 serverKey = Random.new().read(16)
 serverIv = Random.new().read(16)
@@ -109,10 +95,28 @@ while (1): #setup
 
     elif setupMessage[0:2] == "04":
         print(chr(27) + "[2J")
+        clientSocket.send("09" + publicKey.exportKey('PEM')) # send public key
         print "Waiting for " + buddyName + "...\n"
+        keyAndIV = clientSocket.recv(1024).split("##") # then receive the encrypted key and iv
+        clientKey = rsaKey.decrypt(ast.literal_eval(str(keyAndIV[0]))) # get the key
+        clientIv = rsaKey.decrypt(ast.literal_eval(str(keyAndIV[1]))) # get the IV
+        clientEncryptCtr = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
+        clientEncryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientEncryptCtr)
+        clientDecryptCTR = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
+        clientDecryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientDecryptCTR)
         break
 
     elif setupMessage[0:2] == "07":
+        buddyPublicKey = setupMessage[2:]
+        buddyPublicKey = RSA.importKey(buddyPublicKey)
+        clientKey = Random.new().read(16)
+        clientIv = Random.new().read(16)
+        clientEncryptCtr = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
+        clientEncryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientEncryptCtr)
+        clientDecryptCTR = Counter.new(128, initial_value=long(clientIv.encode("hex"), 16))
+        clientDecryptAES = AES.new(clientKey, AES.MODE_CTR, counter=clientDecryptCTR)
+        keyAndIV = str(buddyPublicKey.encrypt(clientKey, 32)) + "##" + str(buddyPublicKey.encrypt(clientIv, 32))
+        clientSocket.send(keyAndIV)
         print(chr(27) + "[2J")
         print "Chat requested from " + buddyName + "\n"
         messagesEnabled = True

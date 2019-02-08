@@ -14,6 +14,7 @@ import ast
 
 activeUsers = []
 activeSockets = []
+clientPublicKeys = {}
 
 #check user name and password for logging in
 def checkuser(username, password, clientConnectionSocket):
@@ -29,7 +30,7 @@ def checkuser(username, password, clientConnectionSocket):
 
 # this function is run within a new thread whenever a new client connects.
 def clientHandler(clientConnectionSocket, addr):
-    global activeUsers, activeSockets
+    global activeUsers, activeSockets, clientPublicKeys
 
     requestedConnect = False
     buddySocket = ""
@@ -80,9 +81,15 @@ def clientHandler(clientConnectionSocket, addr):
             message = decryptAES.decrypt(clientMessage[2:])
             friend = message.split("#")[0]
             buddySocket = activeSockets[activeUsers.index(message)]
-            clientConnectionSocket.send("07")
+            clientConnectionSocket.send("07" + clientPublicKeys[friend])
+            forwardCryptoInit = clientConnectionSocket.recv(1024)
+            buddySocket.send(forwardCryptoInit)
             activeUsers.remove(message)
             activeSockets.remove(buddySocket)
+
+        elif clientMessage[0:2] == "09": # get public key to forward to buddy client
+            clientPublicKey = clientMessage[2:]
+            clientPublicKeys[username] = clientPublicKey
 
         elif clientMessage[0:2] == "11": #code to close
             if buddySocket != "":
