@@ -8,19 +8,31 @@ import signal, os, sys
 import pickle
 import thread
 import ast
+import hmac
+import hashlib
+import base64
 
+# catch CTRL-C singal to let the server know the client is disconnecting
 def signal_handler(signum, frame):
     print "Closing connection"
     clientSocket.send("11")
     clientSocket.close()
     exit()
 
+# ran in thread for receiving messages from another client
 def receiveHandler(clientSocket, clientDecryptAES):
     global messagesEnabled
     while True:
         serverMessage = clientSocket.recv(1024)
         if serverMessage[0:2] == "10":
-            plaintext = clientDecryptAES.decrypt(serverMessage[2:])
+            ciphertextAndTag = serverMessage[2:].split("##")
+            if(hmac.new(clientKey, ciphertextAndTag[0], hashlib.sha256).hexdigest() != ciphertextAndTag[1]):
+                print 'Someone is attempting to manipulate your messages. Exiting now.'
+                print "Closing connection"
+                clientSocket.send("11")
+                clientSocket.close()
+                exit()
+            plaintext = clientDecryptAES.decrypt(ciphertextAndTag[0])
             print '\rFrom ' + buddyName + ':', plaintext
             sys.stdout.write('Enter message: ')
             sys.stdout.flush()
@@ -62,7 +74,9 @@ while (1): #setup
     if setupMessage[0:2] == "00":
         username = raw_input('Enter Username: ')
         password = raw_input('Enter Password: ')
-        clientSocket.send(serverEncryptAES.encrypt(username + "#" + password))
+        ciphertext = serverEncryptAES.encrypt(username + "#" + password)
+        tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
+        clientSocket.send(ciphertext + "##" + tag)
 
     elif setupMessage[0:2] == "01":
         print(chr(27) + "[2J")
@@ -73,9 +87,18 @@ while (1): #setup
             print "User " + buddyName + " is not avaiable or does not exist."
         print("Users connected:")
         connected = 0
-        for x in pickle.loads(serverDecryptAES.decrypt(setupMessage[2:])):
+        ciphertextAndTag = setupMessage[2:].split("##")
+        if(hmac.new(serverKey, ciphertextAndTag[0], hashlib.sha256).hexdigest() != ciphertextAndTag[1]):
+            print 'Someone is attempting to manipulate your messages. Exiting now.'
+            print "Closing connection"
+            clientSocket.send("11")
+            clientSocket.close()
+            exit()
+        for x in pickle.loads(serverDecryptAES.decrypt(ciphertextAndTag[0])):
             if (len(x.split("#")) > 1 and x.split("#")[1] == username):
-                clientSocket.send("06" + serverEncryptAES.encrypt(x))
+                ciphertext = serverEncryptAES.encrypt(x)
+                tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
+                clientSocket.send("06" + ciphertext + "##" + tag)
                 buddyName = x.split("#")[0]
                 requestedConnect = True
                 break
@@ -86,7 +109,9 @@ while (1): #setup
             if connected == 0:
                 print("Nobody else connected currently")
             buddyName = raw_input('Select user to talk to (or press enter to refresh): ')
-            clientSocket.send("03" + serverEncryptAES.encrypt(buddyName))
+            ciphertext = serverEncryptAES.encrypt(buddyName)
+            tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
+            clientSocket.send("03" + ciphertext + "##" + tag)
 
     elif setupMessage[0:2] == "02":
         print("Incorrect Username/Password or already logged in")
@@ -107,6 +132,7 @@ while (1): #setup
         break
 
     elif setupMessage[0:2] == "07":
+        # receive your buddy's public key and send him your generated key and IV for symmetric encryption
         buddyPublicKey = setupMessage[2:]
         buddyPublicKey = RSA.importKey(buddyPublicKey)
         clientKey = Random.new().read(16)
@@ -144,8 +170,9 @@ while True:
             exit()
 
         ciphertext = clientEncryptAES.encrypt(sentence)
+        tag = hmac.new(clientKey, ciphertext, hashlib.sha256).hexdigest()
         try:
-            clientSocket.send("10" + ciphertext)
+            clientSocket.send("10" + ciphertext + "##" + tag)
         except:
             break
 
