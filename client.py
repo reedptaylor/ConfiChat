@@ -37,10 +37,10 @@ def receiveHandler(clientSocket, clientDecryptAES):
             sys.stdout.write('Enter message: ')
             sys.stdout.flush()
         elif serverMessage[0:2] == "12":
-            messagesEnabled = True
-            print(chr(27) + "[2J")
+            messagesEnabled = True #other user connected
+            print(chr(27) + "[2J") #clear screen
             print "Chat with " + buddyName
-        elif serverMessage[0:2] == "13":
+        elif serverMessage[0:2] == "13": #disconnect
             print "Connection closed. Other user disconnected."
             clientSocket.send("11")
             clientSocket.close()
@@ -108,14 +108,14 @@ while (1): #setup
             clientSocket.close()
             exit()
         for x in pickle.loads(serverDecryptAES.decrypt(ciphertextAndTag[0])):
-            if (len(x.split("#")) > 1 and x.split("#")[1] == username):
+            if (len(x.split("#")) > 1 and x.split("#")[1] == username): #if there is a requested connection
                 ciphertext = serverEncryptAES.encrypt(x)
                 tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
                 clientSocket.send("06" + ciphertext + "##" + tag)
                 buddyName = x.split("#")[0]
                 requestedConnect = True
                 break
-            elif (x != username):
+            elif (x != username and len(x.split("#")) == 1):
                 connected = connected + 1
                 print(x)
         if not requestedConnect:
