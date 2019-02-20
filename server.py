@@ -83,8 +83,6 @@ def clientHandler(clientConnectionSocket, addr):
     username  = login[0]
     password = login[1]
 
-    print username, password, ciphertextAndTag[0][:2]
-
     if (ciphertextAndTag[0][:2] == "00"): #user is logging in
         if (checkuser(username, password, clientConnectionSocket) == False):
             clientConnectionSocket.send("02") #alert failed log in
@@ -112,7 +110,7 @@ def clientHandler(clientConnectionSocket, addr):
 
         if clientMessage[0:2] == "03": #select user
             for x in activeUsers:
-                if (len(x.split("#")) > 1 and x.split("#")[1] == username):
+                if (len(x.split("#")) > 1 and x.split("#")[1] == username): #another user is attempting to connect to this user
                     requestedConnect = True
                     break
             ciphertextAndTag = clientMessage[2:].split("##")
@@ -124,7 +122,7 @@ def clientHandler(clientConnectionSocket, addr):
             if (match and not requestedConnect):
                 buddySocket = activeSockets[activeUsers.index(friend)]
                 clientConnectionSocket.send("04")
-                activeUsers.remove(friend)
+                activeUsers.remove(friend) #remove user from lobby
                 activeSockets.remove(buddySocket)
                 activeUsers[activeUsers.index(username)] = username + "#" + friend #link users together
             else:
@@ -143,7 +141,7 @@ def clientHandler(clientConnectionSocket, addr):
             clientConnectionSocket.send("07" + clientPublicKeys[friend])
             forwardCryptoInit = clientConnectionSocket.recv(1024)
             buddySocket.send(forwardCryptoInit)
-            activeUsers.remove(message)
+            activeUsers.remove(message) #remove user from lobby
             activeSockets.remove(buddySocket)
 
         elif clientMessage[0:2] == "09": # get public key to forward to buddy client
@@ -164,7 +162,7 @@ def clientHandler(clientConnectionSocket, addr):
             except:
                 break
 
-    try:
+    try: #user is disconnecting, remove them from lobby if in there
         activeUsers.remove(username)
         activeSockets.remove(clientConnectionSocket)
     except:

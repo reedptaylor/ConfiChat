@@ -37,10 +37,10 @@ def receiveHandler(clientSocket, clientDecryptAES):
             sys.stdout.write('Enter message: ')
             sys.stdout.flush()
         elif serverMessage[0:2] == "12":
-            messagesEnabled = True
-            print(chr(27) + "[2J")
+            messagesEnabled = True #other user connected
+            print(chr(27) + "[2J") #clear screen
             print "Chat with " + buddyName
-        elif serverMessage[0:2] == "13":
+        elif serverMessage[0:2] == "13": #disconnect
             print "Connection closed. Other user disconnected."
             clientSocket.send("11")
             clientSocket.close()
