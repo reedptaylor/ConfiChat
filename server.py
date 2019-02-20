@@ -1,5 +1,5 @@
 ###
-#Alerts: 00=enter user/pass, 01 successful login, 02, failed log in, 11 close connection, 03 select user, 04 successful select, 05 failed select, 06 accepting request, 07 successful link, 08 server encryption setup, 09 client encryption setup, 12 other user connected, 13 end connection
+#Alerts: 00=enter user/pass, 01 successful login, 02, failed log in, 11 close connection, 03 select user, 04 successful select, 05 failed select, 06 accepting request, 07 successful link, 08 server encryption setup, 09 client encryption setup, 12 other user connected, 13 end connection, 20 for creating new account
 #Message Format: "10message" where message is the text to send
 ###
 from socket import *
@@ -29,8 +29,28 @@ def checkuser(username, password, clientConnectionSocket):
         if (user[0] == username and user[1].strip("\n") == password and user[0] not in activeUsers):
             activeUsers.append(username)
             activeSockets.append(clientConnectionSocket)
+            f.close()
             return(True)
     return(False)
+
+#check if username is already taken before creting new account
+def checkcreate(username, password, clientConnectionSocket):
+    global activeUsers, activeSockets
+    f = open("users.txt", "r")
+    for x in f:
+        user = x.split("#") #separate username from password
+        if (user[0] == username):
+            f.close()
+            return(False)
+    f.close()
+    #not taken:
+    f = open("users.txt", "a+") # open for writing now
+    f.write(username + "#" + password + "\n")
+    activeUsers.append(username)
+    activeSockets.append(clientConnectionSocket)
+    f.close()
+    return(True)
+
 
 # this function is run within a new thread whenever a new client connects.
 def clientHandler(clientConnectionSocket, addr):
@@ -52,22 +72,40 @@ def clientHandler(clientConnectionSocket, addr):
 
     clientConnectionSocket.send("00") #alert client to enter username and password
     ciphertextAndTag = clientConnectionSocket.recv(1024).split("##") # separate the received ciphertext and tag into a list
-    if(hmac.new(key, ciphertextAndTag[0], hashlib.sha256).hexdigest() != ciphertextAndTag[1]): # make sure the tag matches
-        print 'Someone is attempting to manipulate your messages. Exiting now.'
+    try:
+        if(hmac.new(key, ciphertextAndTag[0][2:], hashlib.sha256).hexdigest() != ciphertextAndTag[1]): # make sure the tag matches
+            print 'Someone is attempting to manipulate your messages. Exiting now.'
+            exit()
+    except:
+        print ("Client disconnected: ", clientConnectionSocket)
         exit()
-    login = decryptAES.decrypt(ciphertextAndTag[0]).split("#")
+    login = decryptAES.decrypt(ciphertextAndTag[0][2:]).split("#")
     username  = login[0]
     password = login[1]
 
-    if (checkuser(username, password, clientConnectionSocket) == False):
-        clientConnectionSocket.send("02") #alert failed log in
-        clientConnectionSocket.close()
-        return
-    else:
-        # send the client the list of active users
-        ciphertext = encryptAES.encrypt(pickle.dumps(activeUsers))
-        tag = hmac.new(key, ciphertext, hashlib.sha256).hexdigest()
-        clientConnectionSocket.send("01" + ciphertext + "##" + tag)
+    print username, password, ciphertextAndTag[0][:2]
+
+    if (ciphertextAndTag[0][:2] == "00"): #user is logging in
+        if (checkuser(username, password, clientConnectionSocket) == False):
+            clientConnectionSocket.send("02") #alert failed log in
+            clientConnectionSocket.close()
+            return
+        else:
+            # send the client the list of active users
+            ciphertext = encryptAES.encrypt(pickle.dumps(activeUsers))
+            tag = hmac.new(key, ciphertext, hashlib.sha256).hexdigest()
+            clientConnectionSocket.send("01" + ciphertext + "##" + tag)
+
+    elif (ciphertextAndTag[0][:2] == "20"): #user is creating account
+        if (checkcreate(username, password, clientConnectionSocket) == False):
+            clientConnectionSocket.send("02") #alert failed log in
+            clientConnectionSocket.close()
+            returnt
+        else:
+            # send the client the list of active users
+            ciphertext = encryptAES.encrypt(pickle.dumps(activeUsers))
+            tag = hmac.new(key, ciphertext, hashlib.sha256).hexdigest()
+            clientConnectionSocket.send("01" + ciphertext + "##" + tag)
 
     while True:
         clientMessage = clientConnectionSocket.recv(1024)
@@ -82,7 +120,7 @@ def clientHandler(clientConnectionSocket, addr):
                 print 'Someone is attempting to manipulate your messages. Exiting now.'
                 exit()
             friend = decryptAES.decrypt(ciphertextAndTag[0])
-            match = friend in activeUsers #find active user not complete
+            match = friend in activeUsers
             if (match and not requestedConnect):
                 buddySocket = activeSockets[activeUsers.index(friend)]
                 clientConnectionSocket.send("04")

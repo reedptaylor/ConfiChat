@@ -72,15 +72,28 @@ while (1): #setup
     setupMessage = clientSocket.recv(1024)
 
     if setupMessage[0:2] == "00":
-        username = raw_input('Enter Username: ')
-        password = raw_input('Enter Password: ')
-        ciphertext = serverEncryptAES.encrypt(username + "#" + password)
-        tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
-        clientSocket.send(ciphertext + "##" + tag)
+        nextaction = raw_input('Enter \'l\' to login or \'c\' to create account: ')
+        while (not (nextaction == "l" or nextaction == "c")):
+            print(nextaction + " is not a valid input.")
+            nextaction = raw_input('Enter \'l\' to login or \'c\' to create account: ')
+        if (nextaction == 'l'): #login
+            username = raw_input('Enter Username: ')
+            password = raw_input('Enter Password: ')
+            ciphertext = serverEncryptAES.encrypt(username + "#" + password)
+            tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
+            clientSocket.send("00" + ciphertext + "##" + tag)
+        elif (nextaction == 'c'): #create new account
+            username = raw_input('Enter New Username: ')
+            password = raw_input('Enter New Password: ')
+            ciphertext = serverEncryptAES.encrypt(username + "#" + password)
+            tag = hmac.new(serverKey, ciphertext, hashlib.sha256).hexdigest()
+            clientSocket.send("20" + ciphertext + "##" + tag)
 
     elif setupMessage[0:2] == "01":
-        print(chr(27) + "[2J")
+        print(chr(27) + "[2J") # clear screen
         if (new):
+            if (nextaction == 'c'):
+                print("New account successfully created!")
             print("Welcome " + username + "!")
             new = False
         elif (buddyName != ""):
@@ -114,7 +127,10 @@ while (1): #setup
             clientSocket.send("03" + ciphertext + "##" + tag)
 
     elif setupMessage[0:2] == "02":
-        print("Incorrect Username/Password or already logged in")
+        if (nextaction == 'l'):
+            print("Incorrect Username/Password or already logged in")
+        else:
+            print("Username already taken")
         clientSocket.close()
         exit()
 
