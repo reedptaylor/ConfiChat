@@ -9,7 +9,7 @@ from Crypto.Util import Counter
 from Crypto.PublicKey import RSA
 import thread
 import pickle
-import signal, os
+import signal, os, binascii
 import ast
 import hmac
 import hashlib
@@ -20,13 +20,34 @@ activeUsers = []
 activeSockets = []
 clientPublicKeys = {}
 
+# returns the salt || hash of the provided password
+def passwordHash(password):
+    salt = hashlib.sha256(Random.new().read(64)).hexdigest().encode('ascii') # get a 64-byte randomized salt
+    hash = hashlib.pbkdf2_hmac('sha512', password.encode('utf-8'), salt, 100000) # compute hash of concatenated salt/password
+    hash = binascii.hexlify(hash)
+    saltHash = (salt + hash).decode('ascii')
+    return saltHash
+
+# verify that the password input by a user matches the one stores by the server
+def verifyPassword(actualHash, password):
+    salt = actualHash[:64] # extract the salt
+    actualHash = actualHash[64:] # extract the hash
+    checkHash = hashlib.pbkdf2_hmac('sha512', password.encode('utf-8'), salt.encode('ascii'), 100000) # compute hash of concatnated salt/password
+    checkHash = binascii.hexlify(checkHash).decode('ascii')
+    if(checkHash == actualHash):
+        return True
+    else:
+        return False
+
+
 #check user name and password for logging in
 def checkuser(username, password, clientConnectionSocket):
     global activeUsers, activeSockets
     f = open("users.txt", "r")
     for x in f:
         user = x.split("#") #separate username from password
-        if (user[0] == username and user[1].strip("\n") == password and user[0] not in activeUsers):
+        correctPass = verifyPassword(user[1].strip("\n"), password)
+        if (user[0] == username and correctPass and user[0] not in activeUsers):
             activeUsers.append(username)
             activeSockets.append(clientConnectionSocket)
             f.close()
@@ -44,13 +65,13 @@ def checkcreate(username, password, clientConnectionSocket):
             return(False)
     f.close()
     #not taken:
+    hash = passwordHash(password)
     f = open("users.txt", "a+") # open for writing now
-    f.write(username + "#" + password + "\n")
+    f.write(username + "#" + hash + "\n")
     activeUsers.append(username)
     activeSockets.append(clientConnectionSocket)
     f.close()
     return(True)
-
 
 # this function is run within a new thread whenever a new client connects.
 def clientHandler(clientConnectionSocket, addr):
@@ -83,6 +104,8 @@ def clientHandler(clientConnectionSocket, addr):
     username  = login[0]
     password = login[1]
 
+
+
     if (ciphertextAndTag[0][:2] == "00"): #user is logging in
         if (checkuser(username, password, clientConnectionSocket) == False):
             clientConnectionSocket.send("02") #alert failed log in
@@ -98,7 +121,7 @@ def clientHandler(clientConnectionSocket, addr):
         if (checkcreate(username, password, clientConnectionSocket) == False):
             clientConnectionSocket.send("02") #alert failed log in
             clientConnectionSocket.close()
-            returnt
+            return
         else:
             # send the client the list of active users
             ciphertext = encryptAES.encrypt(pickle.dumps(activeUsers))
