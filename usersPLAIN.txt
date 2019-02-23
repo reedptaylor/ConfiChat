@@ -1,5 +1,5 @@
-Reed#reedpass
-Andrew#andrewpass
+reed#reedpass
+andrew#andrewpass
 user3#pass3
 user4#pass4
 guest#password

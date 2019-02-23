@@ -3,7 +3,7 @@ from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Util import Counter
-from sys import exit
+from sys import exit, argv
 import signal, os, sys
 import pickle
 import thread
@@ -46,7 +46,11 @@ def receiveHandler(clientSocket, clientDecryptAES):
             clientSocket.close()
             exit()
 
-serverName = 'localhost'
+if len(argv) != 2:
+    print "Please provide server IP as CLI argument e.g. python client.py 192.168.1.2"
+    exit()
+
+serverName = argv[1]
 serverPort = 12000
 
 clientSocket = socket(AF_INET, SOCK_STREAM)
